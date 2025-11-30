@@ -33,7 +33,7 @@ tokio = { version = "1", features = ["full"] }
 
 Create `zcash-config.toml` in your project root:
 ```toml
-network = "testnet"  # or "mainnet"
+network = "Testnet"  # or "Mainnet"
 rpc_url = "http://localhost:18232"
 rpc_user = "your-rpc-user"
 rpc_password = "your-rpc-password"
