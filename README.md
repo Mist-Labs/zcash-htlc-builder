@@ -162,12 +162,12 @@ zcash-htlc-cli utxos <address>
 
 ### Testnet
 - RPC Port: 18232
-- Faucet: https://faucet.testnet.z.cash/
-- Explorer: https://explorer.testnet.z.cash/
+- FFaucet: https://testnet.zecfaucet.com/
+- Explorer: https://blockexplorer.one/zcash/testnet
 
 ### Mainnet
 - RPC Port: 8232
-- Explorer: https://zcha.in/
+- Explorer: https://blockexplorer.one/zcash/mainnet
 
 ## Testing
 ```bash
@@ -210,7 +210,7 @@ Apache-2.0
 
 ## Support
 
-- Issues: https://github.com/yourusername/zcash-htlc-builder/issues
+- Issues: https://github.com/Mist-Labs/zcash-htlc-builder/issues
 - Docs: https://docs.rs/zcash-htlc-builder
 
 ---
