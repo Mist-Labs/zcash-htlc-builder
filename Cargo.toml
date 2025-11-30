@@ -1,6 +1,6 @@
 [package]
 name = "zcash-htlc-builder"
-version = "0.1.3"
+version = "0.1.5"
 edition = "2021"
 authors = ["Okoli Evans <ebounce500@gmail.com>"]
 description = "Production-ready Zcash HTLC builder for atomic swaps using transparent transactions"
