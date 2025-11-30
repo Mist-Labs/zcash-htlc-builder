@@ -1,0 +1,343 @@
+use chrono::Utc;
+use diesel::pg::PgConnection;
+use diesel::prelude::*;
+use diesel::r2d2::{ConnectionManager, Pool};
+use diesel_migrations::{embed_migrations, EmbeddedMigrations};
+use tracing::info;
+
+use crate::{HTLCOperation, HTLCState, OperationStatus, ZcashHTLC, ZcashNetwork};
+use crate::database::model::{DbHTLCOperation, DbZcashHTLC, NewHTLCOperation, NewZcashHTLC};
+
+use super::connections::{Database, DatabaseError};
+
+pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations");
+
+pub type DbPool = Pool<ConnectionManager<PgConnection>>;
+
+impl Database {
+    pub fn create_htlc(&self, htlc: &ZcashHTLC) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs;
+
+        let mut conn = self.get_connection()?;
+
+        let new_htlc = NewZcashHTLC {
+            id: htlc.id.clone(),
+            p2sh_address: htlc.p2sh_address.clone(),
+            hash_lock: htlc.hash_lock.clone(),
+            timelock: htlc.timelock as i64,
+            recipient_pubkey: htlc.recipient_pubkey.clone(),
+            refund_pubkey: htlc.refund_pubkey.clone(),
+            amount: htlc.amount.clone(),
+            network: htlc.network.as_str().to_string(),
+            state: htlc.state as i16,
+            script_hex: htlc.script_hex.clone(),
+            redeem_script_hex: htlc.redeem_script_hex.clone(),
+        };
+
+        diesel::insert_into(zcash_htlcs::table)
+            .values(&new_htlc)
+            .execute(&mut conn)?;
+
+        info!("📝 Created HTLC record: {}", htlc.id);
+        Ok(())
+    }
+
+    pub fn get_htlc_by_id(&self, htlc_id: &str) -> Result<ZcashHTLC, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let htlc = dsl::zcash_htlcs
+            .filter(dsl::id.eq(htlc_id))
+            .select(DbZcashHTLC::as_select())
+            .first::<DbZcashHTLC>(&mut conn)
+            .map_err(|_| DatabaseError::HTLCNotFound(htlc_id.to_string()))?;
+
+        Ok(htlc.into())
+    }
+
+    pub fn get_htlc_by_txid(&self, txid: &str) -> Result<ZcashHTLC, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let htlc = dsl::zcash_htlcs
+            .filter(dsl::txid.eq(txid))
+            .select(DbZcashHTLC::as_select())
+            .first::<DbZcashHTLC>(&mut conn)
+            .map_err(|_| DatabaseError::HTLCNotFound(txid.to_string()))?;
+
+        Ok(htlc.into())
+    }
+
+    pub fn get_htlc_by_hash_lock(
+        &self,
+        hash_lock: &str,
+    ) -> Result<Option<ZcashHTLC>, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let htlc = dsl::zcash_htlcs
+            .filter(dsl::hash_lock.eq(hash_lock))
+            .select(DbZcashHTLC::as_select())
+            .first::<DbZcashHTLC>(&mut conn)
+            .optional()?;
+
+        Ok(htlc.map(Into::into))
+    }
+
+    pub fn update_htlc_txid(
+        &self,
+        htlc_id: &str,
+        txid: &str,
+        vout: u32,
+    ) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::zcash_htlcs.filter(dsl::id.eq(htlc_id)))
+            .set((
+                dsl::txid.eq(txid),
+                dsl::vout.eq(vout as i32),
+                dsl::state.eq(HTLCState::Locked as i16),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        info!("🔄 Updated HTLC {} with txid: {}", htlc_id, txid);
+        Ok(())
+    }
+
+    pub fn update_htlc_state(&self, htlc_id: &str, state: HTLCState) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::zcash_htlcs.filter(dsl::id.eq(htlc_id)))
+            .set((dsl::state.eq(state as i16), dsl::updated_at.eq(Utc::now())))
+            .execute(&mut conn)?;
+
+        info!("🔄 Updated HTLC {} state to: {:?}", htlc_id, state);
+        Ok(())
+    }
+
+    pub fn update_htlc_secret(&self, htlc_id: &str, secret: &str) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::zcash_htlcs.filter(dsl::id.eq(htlc_id)))
+            .set((dsl::secret.eq(secret), dsl::updated_at.eq(Utc::now())))
+            .execute(&mut conn)?;
+
+        info!("🔐 Updated HTLC {} with secret", htlc_id);
+        Ok(())
+    }
+
+    pub fn get_pending_htlcs(
+        &self,
+        network: ZcashNetwork,
+    ) -> Result<Vec<ZcashHTLC>, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let htlcs = dsl::zcash_htlcs
+            .filter(dsl::network.eq(network.as_str()))
+            .filter(dsl::state.eq(HTLCState::Locked as i16))
+            .select(DbZcashHTLC::as_select())
+            .load::<DbZcashHTLC>(&mut conn)?;
+
+        Ok(htlcs.into_iter().map(Into::into).collect())
+    }
+
+    pub fn get_expired_htlcs(&self, current_block: u64) -> Result<Vec<ZcashHTLC>, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let htlcs = dsl::zcash_htlcs
+            .filter(dsl::state.eq(HTLCState::Locked as i16))
+            .filter(dsl::timelock.lt(current_block as i64))
+            .select(DbZcashHTLC::as_select())
+            .load::<DbZcashHTLC>(&mut conn)?;
+
+        Ok(htlcs.into_iter().map(Into::into).collect())
+    }
+
+    pub fn create_operation(&self, operation: &HTLCOperation) -> Result<(), DatabaseError> {
+        use crate::models::schema::htlc_operations;
+
+        let mut conn = self.get_connection()?;
+
+        let new_op = NewHTLCOperation {
+            id: operation.id.clone(),
+            htlc_id: operation.htlc_id.clone(),
+            operation_type: operation.operation_type.as_str().to_string(),
+            raw_tx_hex: operation.raw_tx_hex.clone(),
+            status: operation.status.as_str().to_string(),
+        };
+
+        diesel::insert_into(htlc_operations::table)
+            .values(&new_op)
+            .execute(&mut conn)?;
+
+        info!("📝 Created operation record: {}", operation.id);
+        Ok(())
+    }
+
+    pub fn update_operation_signed(
+        &self,
+        operation_id: &str,
+        signed_tx_hex: &str,
+    ) -> Result<(), DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::htlc_operations.filter(dsl::id.eq(operation_id)))
+            .set((
+                dsl::signed_tx_hex.eq(signed_tx_hex),
+                dsl::status.eq(OperationStatus::Signed.as_str()),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        info!("✍️ Signed operation: {}", operation_id);
+        Ok(())
+    }
+
+    pub fn update_operation_broadcast(
+        &self,
+        operation_id: &str,
+        txid: &str,
+    ) -> Result<(), DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::htlc_operations.filter(dsl::id.eq(operation_id)))
+            .set((
+                dsl::txid.eq(txid),
+                dsl::status.eq(OperationStatus::Broadcast.as_str()),
+                dsl::broadcast_at.eq(Utc::now()),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        info!("📡 Broadcast operation: {}", operation_id);
+        Ok(())
+    }
+
+    pub fn update_operation_confirmed(
+        &self,
+        operation_id: &str,
+        block_height: u64,
+    ) -> Result<(), DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::htlc_operations.filter(dsl::id.eq(operation_id)))
+            .set((
+                dsl::status.eq(OperationStatus::Confirmed.as_str()),
+                dsl::block_height.eq(block_height as i64),
+                dsl::confirmed_at.eq(Utc::now()),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        info!("✅ Confirmed operation: {}", operation_id);
+        Ok(())
+    }
+
+    pub fn update_operation_failed(
+        &self,
+        operation_id: &str,
+        error: &str,
+    ) -> Result<(), DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::update(dsl::htlc_operations.filter(dsl::id.eq(operation_id)))
+            .set((
+                dsl::status.eq(OperationStatus::Failed.as_str()),
+                dsl::error_message.eq(error),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        info!("❌ Failed operation: {} - {}", operation_id, error);
+        Ok(())
+    }
+
+    pub fn get_operation_by_id(&self, operation_id: &str) -> Result<HTLCOperation, DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let operation = dsl::htlc_operations
+            .filter(dsl::id.eq(operation_id))
+            .select(DbHTLCOperation::as_select())
+            .first::<DbHTLCOperation>(&mut conn)
+            .map_err(|_| DatabaseError::OperationNotFound(operation_id.to_string()))?;
+
+        Ok(operation.into())
+    }
+
+    pub fn get_operations_by_htlc(
+        &self,
+        htlc_id: &str,
+    ) -> Result<Vec<HTLCOperation>, DatabaseError> {
+        use crate::models::schema::htlc_operations::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let operations = dsl::htlc_operations
+            .filter(dsl::htlc_id.eq(htlc_id))
+            .order(dsl::created_at.desc())
+            .select(DbHTLCOperation::as_select())
+            .load::<DbHTLCOperation>(&mut conn)?;
+
+        Ok(operations.into_iter().map(Into::into).collect())
+    }
+
+    pub fn save_checkpoint(&self, chain: &str, block_height: u32) -> Result<(), DatabaseError> {
+        use crate::models::schema::indexer_checkpoints::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        diesel::insert_into(dsl::indexer_checkpoints)
+            .values((
+                dsl::chain.eq(chain),
+                dsl::last_block.eq(block_height as i32),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .on_conflict(dsl::chain)
+            .do_update()
+            .set((
+                dsl::last_block.eq(block_height as i32),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+
+        Ok(())
+    }
+
+    pub fn get_checkpoint(&self, chain: &str) -> Result<Option<u32>, DatabaseError> {
+        use crate::models::schema::indexer_checkpoints::dsl;
+
+        let mut conn = self.get_connection()?;
+
+        let result = dsl::indexer_checkpoints
+            .filter(dsl::chain.eq(chain))
+            .select(dsl::last_block)
+            .first::<i32>(&mut conn)
+            .optional()?;
+
+        Ok(result.map(|b| b as u32))
+    }
+}
