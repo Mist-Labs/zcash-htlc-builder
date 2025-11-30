@@ -23,7 +23,7 @@ zcash-htlc-builder = "0.1.3"
 1. Setup Configuration
 Create a file named zcash-config.toml in your project root with your configuration.
 
-zcash-config.toml Example:
+```toml
 network = "Testnet" # OR Mainnet
 rpc_url = "http://localhost:18232"
 rpc_user = "user" # Can be RPC API-KEY
@@ -44,6 +44,7 @@ min_confirmations = 1
 
 # Fee settings
 network_fee_zec = "0.0001"
+```
 
 ### 2. Setup Database
 ```bash
