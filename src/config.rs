@@ -1,7 +1,7 @@
+use crate::{RelayerConfig, ZcashNetwork};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
 use std::fs;
-use crate::{ZcashNetwork, RelayerConfig};
+use std::path::Path;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZcashConfig {
@@ -30,17 +30,19 @@ impl ZcashConfig {
     }
 
     pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to read config file: {}", e)))?;
-        
+        let content = fs::read_to_string(path).map_err(|e| {
+            ConfigError::InvalidConfig(format!("Failed to read config file: {}", e))
+        })?;
+
         toml::from_str(&content)
             .map_err(|e| ConfigError::InvalidConfig(format!("Failed to parse TOML: {}", e)))
     }
 
     pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
-        let content = fs::read_to_string(path)
-            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to read config file: {}", e)))?;
-        
+        let content = fs::read_to_string(path).map_err(|e| {
+            ConfigError::InvalidConfig(format!("Failed to read config file: {}", e))
+        })?;
+
         serde_json::from_str(&content)
             .map_err(|e| ConfigError::InvalidConfig(format!("Failed to parse JSON: {}", e)))
     }
@@ -60,7 +62,7 @@ impl ZcashConfig {
         self.database_max_connections = max;
         self
     }
-    
+
     pub fn with_relayer(mut self, relayer: RelayerConfig) -> Self {
         self.relayer = Some(relayer);
         self
@@ -85,7 +87,7 @@ impl ZcashConfig {
         }
 
         Err(ConfigError::InvalidConfig(
-            "No config file found. Create zcash-config.toml in project root".to_string()
+            "No config file found. Create zcash-config.toml in project root".to_string(),
         ))
     }
 }

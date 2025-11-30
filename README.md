@@ -16,27 +16,42 @@ A production-ready Rust library for creating and managing Hash Time-Locked Contr
 
 Add to your `Cargo.toml`:
 ```toml
-zcash-htlc-builder = "0.1.0"
+zcash-htlc-builder = "0.1.3"
 ```
 
 ## Quick Start
+1. Setup Configuration
+Create a file named zcash-config.toml in your project root with your configuration.
 
-### 1. Setup Environment
-```bash
-# Copy example environment file
-cp .env.example .env
+zcash-config.toml Example:
+network = "Testnet" # OR Mainnet
+rpc_url = "http://localhost:18232"
+rpc_user = "user" # Can be RPC API-KEY
+database_url = "postgres://localhost/zcash"
+database_max_connections = 10
+explorer_api = "[https://explorer.testnet.z.cash/api](https://explorer.testnet.z.cash/api)"
 
-# Edit .env with your configuration
-nano .env
-```
+# Relayer Configuration
+[relayer]
+hot_wallet_privkey = "privKey"
+hot_wallet_address = "address" # Relayer's funding address
+
+# Relayer settings
+max_tx_per_batch = 10
+poll_interval_secs = 10
+max_retry_attempts = 3
+min_confirmations = 1
+
+# Fee settings
+network_fee_zec = "0.0001"
 
 ### 2. Setup Database
 ```bash
 # Create PostgreSQL database
 createdb zcash_htlc
 
-# Run migrations (automatic in dev mode)
-DATABASE_URL=postgresql://user:pass@localhost/zcash_htlc cargo run --bin zcash-htlc-cli
+# Run migrations (automatic in dev mode, uses database_url from zcash-config.toml)
+cargo run --bin zcash-htlc-cli
 ```
 
 ### 3. Basic Usage
@@ -104,16 +119,6 @@ zcash-htlc-cli redeem <htlc_id> <secret> <recipient_address> <privkey>
 zcash-htlc-cli refund <htlc_id> <refund_address> <privkey>
 ```
 
-### Check Balance
-```bash
-zcash-htlc-cli balance <address>
-```
-
-### List UTXOs
-```bash
-zcash-htlc-cli utxos <address>
-```
-
 ## Architecture
 ```
 ┌─────────────────────────────────────────────┐
@@ -139,6 +144,7 @@ zcash-htlc-cli utxos <address>
 
 - **zcash_htlcs** - HTLC state and metadata
 - **htlc_operations** - Transaction operations (create/redeem/refund)
+- **relayer_utxos** - Unspent Transaction Outputs (UTXOs) managed by the Relayer's hot wallet for funding operations.
 - **indexer_checkpoints** - Blockchain sync state
 
 ## Security Considerations

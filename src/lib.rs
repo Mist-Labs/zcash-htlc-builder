@@ -328,7 +328,7 @@ impl ZcashHTLCClient {
         Ok(self.database.get_htlc_by_id(htlc_id)?)
     }
 
-    /// Get UTXOs for address
+    // Get UTXOs for address
     // pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, HTLCClientError> {
     //     Ok(self.rpc_client.get_utxos(address).await?)
     // }

@@ -1,8 +1,6 @@
-use zcash_htlc_builder::{
-    database::Database, HTLCParams, ZcashConfig, ZcashHTLCClient, UTXO,
-};
 use std::sync::Arc;
 use tracing::{info, Level};
+use zcash_htlc_builder::{database::Database, HTLCParams, ZcashConfig, ZcashHTLCClient, UTXO};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -61,15 +59,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!("\n💳 Step 4: Preparing Funding (Manual - Replace with real UTXOs)");
 
     // TODO: Replace these with real UTXOs from your wallet
-    let funding_utxos = vec![
-        UTXO {
-            txid: "your-txid-here".to_string(),
-            vout: 0,
-            script_pubkey: "your-script-pubkey-hex".to_string(),
-            amount: "0.01".to_string(),
-            confirmations: 6,
-        }
-    ];
+    let funding_utxos = vec![UTXO {
+        txid: "your-txid-here".to_string(),
+        vout: 0,
+        script_pubkey: "your-script-pubkey-hex".to_string(),
+        amount: "0.01".to_string(),
+        confirmations: 6,
+    }];
 
     let change_address = "your-change-address";
     let funding_privkeys = vec!["your-funding-privkey"];
@@ -78,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // ==================== Step 5: Create HTLC (Commented - needs real UTXOs) ====================
     info!("\n🔨 Step 5: Creating HTLC (Skipped - needs real funding UTXOs)");
-    
+
     // Uncomment when you have real UTXOs:
     /*
     let result = client.create_htlc(

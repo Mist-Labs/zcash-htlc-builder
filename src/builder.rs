@@ -5,7 +5,7 @@ use bitcoin::hash_types::Txid;
 use bitcoin::{PackedLockTime, Sequence, Witness};
 use std::str::FromStr;
 
-use crate::models::{HTLCParams, UTXO, ZcashNetwork};
+use crate::models::{HTLCParams, ZcashNetwork, UTXO};
 use crate::script::HTLCScriptBuilder;
 
 const DUST_THRESHOLD: u64 = 546;
@@ -31,12 +31,14 @@ impl TransactionBuilder {
         change_address: &str,
     ) -> Result<(Transaction, Script), TxBuilderError> {
         let amount_sat = self.parse_amount(&params.amount)?;
-        
+
         if amount_sat < DUST_THRESHOLD {
             return Err(TxBuilderError::AmountTooSmall);
         }
 
-        let redeem_script = self.script_builder.build_htlc_script(params)
+        let redeem_script = self
+            .script_builder
+            .build_htlc_script(params)
             .map_err(|e| TxBuilderError::ScriptError(e.to_string()))?;
 
         let script_pubkey = self.script_builder.p2sh_script_pubkey(&redeem_script);
@@ -44,9 +46,8 @@ impl TransactionBuilder {
         let inputs: Vec<TxIn> = utxos
             .iter()
             .map(|utxo| {
-                let txid = Txid::from_str(&utxo.txid)
-                    .map_err(|_| TxBuilderError::InvalidTxid)?;
-                
+                let txid = Txid::from_str(&utxo.txid).map_err(|_| TxBuilderError::InvalidTxid)?;
+
                 Ok(TxIn {
                     previous_output: OutPoint {
                         txid,
@@ -109,8 +110,7 @@ impl TransactionBuilder {
         _redeem_script: &Script,
         recipient_address: &str,
     ) -> Result<Transaction, TxBuilderError> {
-        let txid = Txid::from_str(htlc_txid)
-            .map_err(|_| TxBuilderError::InvalidTxid)?;
+        let txid = Txid::from_str(htlc_txid).map_err(|_| TxBuilderError::InvalidTxid)?;
 
         let amount_sat = self.parse_amount(htlc_amount)?;
         let estimated_size = self.estimate_tx_size(1, 1);
@@ -155,8 +155,7 @@ impl TransactionBuilder {
         _redeem_script: &Script,
         refund_address: &str,
     ) -> Result<Transaction, TxBuilderError> {
-        let txid = Txid::from_str(htlc_txid)
-            .map_err(|_| TxBuilderError::InvalidTxid)?;
+        let txid = Txid::from_str(htlc_txid).map_err(|_| TxBuilderError::InvalidTxid)?;
 
         let amount_sat = self.parse_amount(htlc_amount)?;
         let estimated_size = self.estimate_tx_size(1, 1);
@@ -197,17 +196,16 @@ impl TransactionBuilder {
     }
 
     pub fn deserialize_tx(&self, hex: &str) -> Result<Transaction, TxBuilderError> {
-        let bytes = hex::decode(hex)
-            .map_err(|_| TxBuilderError::InvalidHex)?;
-        
-        encode::deserialize(&bytes)
-            .map_err(|e| TxBuilderError::DeserializationError(e.to_string()))
+        let bytes = hex::decode(hex).map_err(|_| TxBuilderError::InvalidHex)?;
+
+        encode::deserialize(&bytes).map_err(|e| TxBuilderError::DeserializationError(e.to_string()))
     }
 
     fn parse_amount(&self, amount_str: &str) -> Result<u64, TxBuilderError> {
-        let amount_f64: f64 = amount_str.parse()
+        let amount_f64: f64 = amount_str
+            .parse()
             .map_err(|_| TxBuilderError::InvalidAmount)?;
-        
+
         let zatoshis = (amount_f64 * 100_000_000.0).round() as u64;
         Ok(zatoshis)
     }
@@ -217,7 +215,8 @@ impl TransactionBuilder {
     }
 
     fn address_to_script_pubkey(&self, address: &str) -> Result<Script, TxBuilderError> {
-        let decoded = bs58::decode(address).into_vec()
+        let decoded = bs58::decode(address)
+            .into_vec()
             .map_err(|_| TxBuilderError::InvalidAddress)?;
 
         if decoded.len() < 26 {

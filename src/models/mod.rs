@@ -1,8 +1,6 @@
 pub mod schema;
-
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[repr(i16)]
@@ -35,7 +33,7 @@ impl HTLCState {
             HTLCState::Redeemed => "redeemed",
             HTLCState::Refunded => "refunded",
             HTLCState::Expired => "expired",
-            HTLCState::Failed => "failed"
+            HTLCState::Failed => "failed",
         }
     }
 }
@@ -180,7 +178,6 @@ impl ZcashNetwork {
     }
 }
 
-
 // ==================== HTLC Parameters ====================
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -310,7 +307,6 @@ pub struct RelayerUTXO {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
-
 
 impl From<RelayerUTXO> for UTXO {
     fn from(utxo: RelayerUTXO) -> Self {

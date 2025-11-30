@@ -3,9 +3,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use tracing::{info, warn};
 
-use crate::{
-    ExplorerUTXO, RawTransaction, RpcError, ZcashNetwork, ZcashRpcRequest, ZcashRpcResponse, UTXO,
-};
+use crate::{RawTransaction, RpcError, ZcashNetwork, ZcashRpcRequest, ZcashRpcResponse};
 
 pub struct ZcashRpcClient {
     client: Client,
@@ -26,7 +24,9 @@ impl ZcashRpcClient {
     ) -> Self {
         let explorer_api = match network {
             ZcashNetwork::Mainnet => "https://api.blockchair.com/zcash".to_string(),
-            ZcashNetwork::Testnet => "https://rest.cryptoapis.io/v2/blockchain-data/zcash/testnet".to_string(),
+            ZcashNetwork::Testnet => {
+                "https://rest.cryptoapis.io/v2/blockchain-data/zcash/testnet".to_string()
+            }
         };
 
         Self {
@@ -164,8 +164,7 @@ impl ZcashRpcClient {
     /// Query UTXOs for an address using block explorer
     // pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, RpcClientError> {
     //     info!("🔍 Querying UTXOs for address: {}", address);
-
-        
+    //
     //     let url = format!("{}/v2/utxo/{}", self.explorer_api, address);
 
     //     let response = self
@@ -196,7 +195,7 @@ impl ZcashRpcClient {
     //             script_pubkey: u.script_pubkey.unwrap_or_default(),
     //             confirmations: u.confirmations.unwrap_or(0),
     //         })
-    //         .collect(); 
+    //         .collect();
 
     //    Ok(converted)
     // }
@@ -237,7 +236,7 @@ impl ZcashRpcClient {
     //     Ok(balance_zec)
     // }
 
-    /// Check if transaction is confirmed
+    // Check if transaction is confirmed
     pub async fn is_transaction_confirmed(
         &self,
         txid: &str,
@@ -251,6 +250,7 @@ impl ZcashRpcClient {
 
     // ==================== Helper Methods ====================
 
+    #[allow(dead_code)]
     fn zatoshi_to_zec(&self, zatoshis: u64) -> String {
         let zec = zatoshis as f64 / 100_000_000.0;
         format!("{:.8}", zec)
