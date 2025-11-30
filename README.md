@@ -21,15 +21,15 @@ zcash-htlc-builder = "0.1.3"
 
 ## Quick Start
 1. Setup Configuration
-Create a file named zcash-config.toml in your project root with your configuration.
+Create a file named `zcash-config.toml` in your project root with your configuration.
 
-zcash-config.toml Example:
-network = "Testnet" # OR Mainnet
+```toml
+network = "Testnet" # OR Mainnet 
 rpc_url = "http://localhost:18232"
 rpc_user = "user" # Can be RPC API-KEY
 database_url = "postgres://localhost/zcash"
 database_max_connections = 10
-explorer_api = "[https://explorer.testnet.z.cash/api](https://explorer.testnet.z.cash/api)"
+explorer_api = "https://explorer.testnet.z.cash/api"
 
 # Relayer Configuration
 [relayer]
@@ -44,6 +44,7 @@ min_confirmations = 1
 
 # Fee settings
 network_fee_zec = "0.0001"
+```
 
 ### 2. Setup Database
 ```bash
