@@ -25,8 +25,8 @@ impl ZcashRpcClient {
         network: ZcashNetwork,
     ) -> Self {
         let explorer_api = match network {
-            ZcashNetwork::Mainnet => "https://api.zcha.in".to_string(),
-            ZcashNetwork::Testnet => "https://explorer.testnet.z.cash/api".to_string(),
+            ZcashNetwork::Mainnet => "https://api.blockchair.com/zcash".to_string(),
+            ZcashNetwork::Testnet => "https://rest.cryptoapis.io/v2/blockchain-data/zcash/testnet".to_string(),
         };
 
         Self {
@@ -58,7 +58,11 @@ impl ZcashRpcClient {
 
         let mut req_builder = self.client.post(&self.rpc_url).json(&request);
 
-        if let (Some(user), Some(pass)) = (&self.rpc_user, &self.rpc_password) {
+        if self.rpc_url.contains("tatum.io") || self.rpc_url.contains("chain49.com") {
+            if let Some(api_key) = &self.rpc_user {
+                req_builder = req_builder.header("x-api-key", api_key);
+            }
+        } else if let (Some(user), Some(pass)) = (&self.rpc_user, &self.rpc_password) {
             req_builder = req_builder.basic_auth(user, Some(pass));
         }
 
@@ -158,80 +162,80 @@ impl ZcashRpcClient {
     // ==================== Block Explorer Methods ====================
 
     /// Query UTXOs for an address using block explorer
-    pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, RpcClientError> {
-        info!("🔍 Querying UTXOs for address: {}", address);
+    // pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, RpcClientError> {
+    //     info!("🔍 Querying UTXOs for address: {}", address);
 
-        let url = format!("{}/address/{}/utxo", self.explorer_api, address);
+        
+    //     let url = format!("{}/v2/utxo/{}", self.explorer_api, address);
 
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| RpcClientError::NetworkError(e.to_string()))?;
+    //     let response = self
+    //         .client
+    //         .get(&url)
+    //         .send()
+    //         .await
+    //         .map_err(|e| RpcClientError::NetworkError(e.to_string()))?;
 
-        if !response.status().is_success() {
-            return Err(RpcClientError::ExplorerError(format!(
-                "HTTP {} from explorer",
-                response.status()
-            )));
-        }
+    //     if !response.status().is_success() {
+    //         return Err(RpcClientError::ExplorerError(format!(
+    //             "HTTP {} from explorer",
+    //             response.status()
+    //         )));
+    //     }
 
-        let utxos: Vec<ExplorerUTXO> = response
-            .json()
-            .await
-            .map_err(|e| RpcClientError::ParseError(e.to_string()))?;
+    //     let utxos: Vec<ExplorerUTXO> = response
+    //         .json()
+    //         .await
+    //         .map_err(|e| RpcClientError::ParseError(e.to_string()))?;
 
-        let converted: Vec<UTXO> = utxos
-            .into_iter()
-            .map(|u| UTXO {
-                txid: u.txid,
-                vout: u.vout,
-                amount: self.zatoshi_to_zec(u.value),
-                script_pubkey: u.script_pubkey.unwrap_or_default(),
-                confirmations: u.confirmations.unwrap_or(0),
-            })
-            .collect();
+    //     let converted: Vec<UTXO> = utxos
+    //         .into_iter()
+    //         .map(|u| UTXO {
+    //             txid: u.txid,
+    //             vout: u.vout,
+    //             amount: self.zatoshi_to_zec(u.value),
+    //             script_pubkey: u.script_pubkey.unwrap_or_default(),
+    //             confirmations: u.confirmations.unwrap_or(0),
+    //         })
+    //         .collect(); 
 
-        info!("✅ Found {} UTXOs", converted.len());
-        Ok(converted)
-    }
+    //    Ok(converted)
+    // }
 
-    /// Get address balance
-    pub async fn get_balance(&self, address: &str) -> Result<String, RpcClientError> {
-        info!("💰 Querying balance for address: {}", address);
+    // /// Get address balance
+    // pub async fn get_balance(&self, address: &str) -> Result<String, RpcClientError> {
+    //     info!("💰 Querying balance for address: {}", address);
 
-        let url = format!("{}/address/{}", self.explorer_api, address);
+    //     let url = format!("{}/v2/address/{}", self.explorer_api, address);
 
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| RpcClientError::NetworkError(e.to_string()))?;
+    //     let response = self
+    //         .client
+    //         .get(&url)
+    //         .send()
+    //         .await
+    //         .map_err(|e| RpcClientError::NetworkError(e.to_string()))?;
 
-        if !response.status().is_success() {
-            return Err(RpcClientError::ExplorerError(format!(
-                "HTTP {} from explorer",
-                response.status()
-            )));
-        }
+    //     if !response.status().is_success() {
+    //         return Err(RpcClientError::ExplorerError(format!(
+    //             "HTTP {} from explorer",
+    //             response.status()
+    //         )));
+    //     }
 
-        #[derive(Deserialize)]
-        struct AddressInfo {
-            balance: u64,
-        }
+    //     #[derive(Deserialize)]
+    //     struct AddressInfo {
+    //         balance: u64,
+    //     }
 
-        let info: AddressInfo = response
-            .json()
-            .await
-            .map_err(|e| RpcClientError::ParseError(e.to_string()))?;
+    //     let info: AddressInfo = response
+    //         .json()
+    //         .await
+    //         .map_err(|e| RpcClientError::ParseError(e.to_string()))?;
 
-        let balance_zec = self.zatoshi_to_zec(info.balance);
-        info!("✅ Balance: {} ZEC", balance_zec);
+    //     let balance_zec = self.zatoshi_to_zec(info.balance);
+    //     info!("✅ Balance: {} ZEC", balance_zec);
 
-        Ok(balance_zec)
-    }
+    //     Ok(balance_zec)
+    // }
 
     /// Check if transaction is confirmed
     pub async fn is_transaction_confirmed(

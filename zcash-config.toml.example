@@ -1,0 +1,6 @@
+network = "testnet"
+rpc_url = "http://localhost:18232"
+rpc_user = "user" # Can be RPC API-KEY
+database_url = "postgres://localhost/zcash"
+database_max_connections = 10
+explorer_api = "https://explorer.testnet.z.cash/api"

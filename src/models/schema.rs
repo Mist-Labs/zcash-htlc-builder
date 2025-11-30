@@ -28,6 +28,27 @@ diesel::table! {
 }
 
 diesel::table! {
+    relayer_utxos (id) {
+        #[max_length = 255]
+        id -> Varchar,
+        #[max_length = 255]
+        txid -> Varchar,
+        vout -> Int4,
+        #[max_length = 50]
+        amount -> Varchar,
+        script_pubkey -> Text,
+        confirmations -> Int4,
+        #[max_length = 255]
+        address -> Varchar,
+        spent -> Bool,
+        #[max_length = 255]
+        spent_in_tx -> Nullable<Varchar>,
+        created_at -> Timestamptz,
+        updated_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     zcash_htlcs (id) {
         id -> Varchar,
         txid -> Nullable<Varchar>,
@@ -45,6 +66,9 @@ diesel::table! {
         redeem_script_hex -> Text,
         created_at -> Timestamptz,
         updated_at -> Timestamptz,
+        #[max_length = 255]
+        recipient_address -> Nullable<Varchar>,
+        signed_redeem_tx -> Nullable<Text>,
     }
 }
 
@@ -53,5 +77,6 @@ diesel::joinable!(htlc_operations -> zcash_htlcs (htlc_id));
 diesel::allow_tables_to_appear_in_same_query!(
     htlc_operations,
     indexer_checkpoints,
+    relayer_utxos,
     zcash_htlcs,
 );

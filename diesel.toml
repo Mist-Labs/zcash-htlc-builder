@@ -6,4 +6,4 @@ file = "src/models/schema.rs"
 custom_type_derives = ["diesel::query_builder::QueryId", "Clone"]
 
 [migrations_directory]
-dir = "/Users/MAC/Rust/Zcash/zcash_light_client_sdk/src/database/migrations"
+dir = "/Users/MAC/Rust/Zcash/zcash_light_client_sdk/migrations"

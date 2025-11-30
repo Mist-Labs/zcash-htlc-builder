@@ -59,16 +59,6 @@ impl ZcashHTLCClient {
         }
     }
 
-    /// Create from environment variables
-    pub fn from_env() -> Result<Self, HTLCClientError> {
-        dotenv::dotenv().ok();
-        
-        let config = ZcashConfig::from_env()?;
-        let database = Arc::new(Database::from_env()?);
-
-        Ok(Self::new(config, database))
-    }
-
     // ==================== HTLC Operations ====================
 
     /// Create a new HTLC
@@ -82,9 +72,9 @@ impl ZcashHTLCClient {
         info!("🔨 Creating HTLC for {} ZEC", params.amount);
 
         // Build HTLC transaction
-        let (tx, redeem_script) = self
-            .tx_builder
-            .build_htlc_tx(&params, funding_utxos.clone(), change_address)?;
+        let (tx, redeem_script) =
+            self.tx_builder
+                .build_htlc_tx(&params, funding_utxos.clone(), change_address)?;
 
         // Generate P2SH address
         let p2sh_address = self.script_builder.script_to_p2sh_address(&redeem_script)?;
@@ -124,6 +114,7 @@ impl ZcashHTLCClient {
             vout: None,
             script_hex: hex::encode(redeem_script.as_bytes()),
             redeem_script_hex: hex::encode(redeem_script.as_bytes()),
+            signed_redeem_tx: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -152,10 +143,11 @@ impl ZcashHTLCClient {
 
         // Broadcast transaction
         let txid = self.rpc_client.send_raw_transaction(&tx_hex).await?;
-        
+
         // Update database
         self.database.update_htlc_txid(&htlc_id, &txid, 0)?;
-        self.database.update_operation_broadcast(&operation.id, &txid)?;
+        self.database
+            .update_operation_broadcast(&operation.id, &txid)?;
 
         info!("✅ HTLC created with txid: {}", txid);
 
@@ -189,8 +181,8 @@ impl ZcashHTLCClient {
         let vout = htlc.vout.ok_or(HTLCClientError::HTLCNotLocked)?;
 
         // Decode redeem script
-        let redeem_script_bytes = hex::decode(&htlc.redeem_script_hex)
-            .map_err(|_| HTLCClientError::InvalidScript)?;
+        let redeem_script_bytes =
+            hex::decode(&htlc.redeem_script_hex).map_err(|_| HTLCClientError::InvalidScript)?;
         let redeem_script = bitcoin::blockdata::script::Script::from(redeem_script_bytes);
 
         // Build redeem transaction
@@ -204,13 +196,9 @@ impl ZcashHTLCClient {
         )?;
 
         // Sign transaction
-        let signed_tx = self.signer.sign_htlc_redeem(
-            tx,
-            0,
-            &redeem_script,
-            secret,
-            recipient_privkey,
-        )?;
+        let signed_tx =
+            self.signer
+                .sign_htlc_redeem(tx, 0, &redeem_script, secret, recipient_privkey)?;
 
         let tx_hex = self.tx_builder.serialize_tx(&signed_tx);
 
@@ -238,9 +226,11 @@ impl ZcashHTLCClient {
         let redeem_txid = self.rpc_client.send_raw_transaction(&tx_hex).await?;
 
         // Update database
-        self.database.update_htlc_state(htlc_id, HTLCState::Redeemed)?;
+        self.database
+            .update_htlc_state(htlc_id, HTLCState::Redeemed)?;
         self.database.update_htlc_secret(htlc_id, secret)?;
-        self.database.update_operation_broadcast(&operation_id, &redeem_txid)?;
+        self.database
+            .update_operation_broadcast(&operation_id, &redeem_txid)?;
 
         info!("✅ HTLC redeemed with txid: {}", redeem_txid);
 
@@ -272,8 +262,8 @@ impl ZcashHTLCClient {
         }
 
         // Decode redeem script
-        let redeem_script_bytes = hex::decode(&htlc.redeem_script_hex)
-            .map_err(|_| HTLCClientError::InvalidScript)?;
+        let redeem_script_bytes =
+            hex::decode(&htlc.redeem_script_hex).map_err(|_| HTLCClientError::InvalidScript)?;
         let redeem_script = bitcoin::blockdata::script::Script::from(redeem_script_bytes);
 
         // Build refund transaction
@@ -287,7 +277,9 @@ impl ZcashHTLCClient {
         )?;
 
         // Sign transaction
-        let signed_tx = self.signer.sign_htlc_refund(tx, 0, &redeem_script, refund_privkey)?;
+        let signed_tx = self
+            .signer
+            .sign_htlc_refund(tx, 0, &redeem_script, refund_privkey)?;
 
         let tx_hex = self.tx_builder.serialize_tx(&signed_tx);
 
@@ -315,12 +307,18 @@ impl ZcashHTLCClient {
         let refund_txid = self.rpc_client.send_raw_transaction(&tx_hex).await?;
 
         // Update database
-        self.database.update_htlc_state(htlc_id, HTLCState::Refunded)?;
-        self.database.update_operation_broadcast(&operation_id, &refund_txid)?;
+        self.database
+            .update_htlc_state(htlc_id, HTLCState::Refunded)?;
+        self.database
+            .update_operation_broadcast(&operation_id, &refund_txid)?;
 
         info!("✅ HTLC refunded with txid: {}", refund_txid);
 
         Ok(refund_txid)
+    }
+
+    pub async fn broadcast_raw_tx(&self, tx_hex: &str) -> Result<String, HTLCClientError> {
+        Ok(self.rpc_client.send_raw_transaction(tx_hex).await?)
     }
 
     // ==================== Query Methods ====================
@@ -331,13 +329,17 @@ impl ZcashHTLCClient {
     }
 
     /// Get UTXOs for address
-    pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, HTLCClientError> {
-        Ok(self.rpc_client.get_utxos(address).await?)
-    }
+    // pub async fn get_utxos(&self, address: &str) -> Result<Vec<UTXO>, HTLCClientError> {
+    //     Ok(self.rpc_client.get_utxos(address).await?)
+    // }
 
-    /// Get address balance
-    pub async fn get_balance(&self, address: &str) -> Result<String, HTLCClientError> {
-        Ok(self.rpc_client.get_balance(address).await?)
+    // /// Get address balance
+    // pub async fn get_balance(&self, address: &str) -> Result<String, HTLCClientError> {
+    //     Ok(self.rpc_client.get_balance(address).await?)
+    // }
+
+    pub async fn get_current_block_height(&self) -> Result<u64, HTLCClientError> {
+        Ok(self.rpc_client.get_block_count().await?)
     }
 
     /// Wait for transaction confirmation
@@ -388,31 +390,31 @@ impl ZcashHTLCClient {
 pub enum HTLCClientError {
     #[error("Config error: {0}")]
     ConfigError(#[from] ConfigError),
-    
+
     #[error("Database error: {0}")]
     DatabaseError(#[from] DatabaseError),
-    
+
     #[error("RPC error: {0}")]
     RpcError(#[from] RpcClientError),
-    
+
     #[error("Transaction builder error: {0}")]
     TxBuilderError(#[from] TxBuilderError),
-    
+
     #[error("Script error: {0}")]
     ScriptError(#[from] HTLCScriptError),
-    
+
     #[error("Signer error: {0}")]
     SignerError(#[from] SignerError),
-    
+
     #[error("Invalid secret for hash lock")]
     InvalidSecret,
-    
+
     #[error("HTLC not locked (missing txid or vout)")]
     HTLCNotLocked,
-    
+
     #[error("Invalid script format")]
     InvalidScript,
-    
+
     #[error("Timelock not expired (current: {current}, required: {required})")]
     TimelockNotExpired { current: u64, required: u64 },
 }

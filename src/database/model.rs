@@ -1,7 +1,11 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 
-use crate::{HTLCOperation, HTLCOperationType, HTLCState, OperationStatus, ZcashHTLC, ZcashNetwork, schema::{htlc_operations, indexer_checkpoints, zcash_htlcs}};
+use crate::{
+    schema::{htlc_operations, indexer_checkpoints, zcash_htlcs},
+    HTLCOperation, HTLCOperationType, HTLCState, OperationStatus, RelayerUTXO, ZcashHTLC,
+    ZcashNetwork,
+};
 
 #[derive(Debug, Clone, Queryable, Selectable, Insertable, AsChangeset)]
 #[diesel(table_name = zcash_htlcs)]
@@ -21,6 +25,7 @@ pub struct DbZcashHTLC {
     pub vout: Option<i32>,
     pub script_hex: String,
     pub redeem_script_hex: String,
+    pub signed_redeem_tx: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -80,6 +85,52 @@ pub struct IndexerCheckpoint {
     pub updated_at: DateTime<Utc>,
 }
 
+#[derive(Queryable, Selectable, Identifiable, Debug)]
+#[diesel(table_name = crate::models::schema::relayer_utxos)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct DbRelayerUTXO {
+    pub id: String,
+    pub txid: String,
+    pub vout: i32,
+    pub amount: String,
+    pub script_pubkey: String,
+    pub confirmations: i32,
+    pub address: String,
+    pub spent: bool,
+    pub spent_in_tx: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Insertable, Debug)]
+#[diesel(table_name = crate::models::schema::relayer_utxos)]
+pub struct NewRelayerUTXO {
+    pub id: String,
+    pub txid: String,
+    pub vout: i32,
+    pub amount: String,
+    pub script_pubkey: String,
+    pub confirmations: i32,
+    pub address: String,
+}
+
+impl From<DbRelayerUTXO> for RelayerUTXO {
+    fn from(db: DbRelayerUTXO) -> Self {
+        RelayerUTXO {
+            id: db.id,
+            txid: db.txid,
+            vout: db.vout as u32,
+            amount: db.amount,
+            script_pubkey: db.script_pubkey,
+            confirmations: db.confirmations as u32,
+            address: db.address,
+            spent: db.spent,
+            spent_in_tx: db.spent_in_tx,
+            created_at: db.created_at,
+            updated_at: db.updated_at,
+        }
+    }
+}
 
 impl From<DbZcashHTLC> for ZcashHTLC {
     fn from(db: DbZcashHTLC) -> Self {
@@ -98,6 +149,7 @@ impl From<DbZcashHTLC> for ZcashHTLC {
             vout: db.vout.map(|v| v as u32),
             script_hex: db.script_hex,
             redeem_script_hex: db.redeem_script_hex,
+            signed_redeem_tx: db.signed_redeem_tx,
             created_at: db.created_at,
             updated_at: db.updated_at,
         }

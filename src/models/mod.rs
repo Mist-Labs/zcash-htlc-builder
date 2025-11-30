@@ -12,6 +12,7 @@ pub enum HTLCState {
     Redeemed = 2,
     Refunded = 3,
     Expired = 4,
+    Failed = 5,
 }
 
 impl HTLCState {
@@ -22,6 +23,7 @@ impl HTLCState {
             2 => HTLCState::Redeemed,
             3 => HTLCState::Refunded,
             4 => HTLCState::Expired,
+            5 => HTLCState::Failed,
             _ => HTLCState::Pending,
         }
     }
@@ -33,6 +35,7 @@ impl HTLCState {
             HTLCState::Redeemed => "redeemed",
             HTLCState::Refunded => "refunded",
             HTLCState::Expired => "expired",
+            HTLCState::Failed => "failed"
         }
     }
 }
@@ -79,6 +82,7 @@ pub struct ZcashHTLC {
     pub vout: Option<u32>,
     pub script_hex: String,
     pub redeem_script_hex: String,
+    pub signed_redeem_tx: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -279,4 +283,43 @@ pub struct HTLCCreationResult {
     pub txid: String,
     pub p2sh_address: String,
     pub redeem_script: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayerConfig {
+    pub hot_wallet_privkey: String,
+    pub hot_wallet_address: String,
+    pub max_tx_per_batch: u32,
+    pub poll_interval_secs: u64,
+    pub max_retry_attempts: u32,
+    pub min_confirmations: u32,
+    pub network_fee_zec: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RelayerUTXO {
+    pub id: String,
+    pub txid: String,
+    pub vout: u32,
+    pub amount: String,
+    pub script_pubkey: String,
+    pub confirmations: u32,
+    pub address: String,
+    pub spent: bool,
+    pub spent_in_tx: Option<String>,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+
+impl From<RelayerUTXO> for UTXO {
+    fn from(utxo: RelayerUTXO) -> Self {
+        UTXO {
+            txid: utxo.txid,
+            vout: utxo.vout,
+            amount: utxo.amount,
+            script_pubkey: utxo.script_pubkey,
+            confirmations: utxo.confirmations,
+        }
+    }
 }

@@ -14,6 +14,8 @@ CREATE TABLE zcash_htlcs (
     vout INTEGER,
     script_hex TEXT NOT NULL,
     redeem_script_hex TEXT NOT NULL,
+    recipient_address VARCHAR(255),
+    signed_redeem_tx TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );

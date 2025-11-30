@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
-use std::env;
-
-use crate::ZcashNetwork;
+use std::path::Path;
+use std::fs;
+use crate::{ZcashNetwork, RelayerConfig};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ZcashConfig {
@@ -12,46 +12,11 @@ pub struct ZcashConfig {
     pub explorer_api: Option<String>,
     pub database_url: String,
     pub database_max_connections: u32,
+    pub relayer: Option<RelayerConfig>,
 }
 
 impl ZcashConfig {
-    pub fn from_env() -> Result<Self, ConfigError> {
-        let network = env::var("ZCASH_NETWORK")
-            .unwrap_or_else(|_| "testnet".to_string());
-        
-        let network = ZcashNetwork::from_str(&network);
-
-        let rpc_url = env::var("ZCASH_RPC_URL")
-            .map_err(|_| ConfigError::MissingEnvVar("ZCASH_RPC_URL"))?;
-
-        let rpc_user = env::var("ZCASH_RPC_USER").ok();
-        let rpc_password = env::var("ZCASH_RPC_PASSWORD").ok();
-        let explorer_api = env::var("ZCASH_EXPLORER_API").ok();
-
-        let database_url = env::var("DATABASE_URL")
-            .map_err(|_| ConfigError::MissingEnvVar("DATABASE_URL"))?;
-
-        let database_max_connections = env::var("DATABASE_MAX_CONNECTIONS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(10);
-
-        Ok(Self {
-            network,
-            rpc_url,
-            rpc_user,
-            rpc_password,
-            explorer_api,
-            database_url,
-            database_max_connections,
-        })
-    }
-
-    pub fn new(
-        network: ZcashNetwork,
-        rpc_url: String,
-        database_url: String,
-    ) -> Self {
+    pub fn new(network: ZcashNetwork, rpc_url: String, database_url: String) -> Self {
         Self {
             network,
             rpc_url,
@@ -60,7 +25,24 @@ impl ZcashConfig {
             explorer_api: None,
             database_url,
             database_max_connections: 10,
+            relayer: None,
         }
+    }
+
+    pub fn from_toml_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to read config file: {}", e)))?;
+        
+        toml::from_str(&content)
+            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to parse TOML: {}", e)))
+    }
+
+    pub fn from_json_file<P: AsRef<Path>>(path: P) -> Result<Self, ConfigError> {
+        let content = fs::read_to_string(path)
+            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to read config file: {}", e)))?;
+        
+        serde_json::from_str(&content)
+            .map_err(|e| ConfigError::InvalidConfig(format!("Failed to parse JSON: {}", e)))
     }
 
     pub fn with_auth(mut self, user: String, password: String) -> Self {
@@ -73,13 +55,43 @@ impl ZcashConfig {
         self.explorer_api = Some(api_url);
         self
     }
+
+    pub fn with_max_connections(mut self, max: u32) -> Self {
+        self.database_max_connections = max;
+        self
+    }
+    
+    pub fn with_relayer(mut self, relayer: RelayerConfig) -> Self {
+        self.relayer = Some(relayer);
+        self
+    }
+
+    pub fn from_default_locations() -> Result<Self, ConfigError> {
+        let possible_paths = vec![
+            "./zcash-config.toml",
+            "./zcash-config.json",
+            "../zcash-config.toml",
+            "../zcash-config.json",
+        ];
+
+        for path in possible_paths {
+            if Path::new(path).exists() {
+                return if path.ends_with(".json") {
+                    Self::from_json_file(path)
+                } else {
+                    Self::from_toml_file(path)
+                };
+            }
+        }
+
+        Err(ConfigError::InvalidConfig(
+            "No config file found. Create zcash-config.toml in project root".to_string()
+        ))
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum ConfigError {
-    #[error("Missing environment variable: {0}")]
-    MissingEnvVar(&'static str),
-    
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
 }

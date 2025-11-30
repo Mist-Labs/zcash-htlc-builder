@@ -5,8 +5,8 @@ use diesel::r2d2::{ConnectionManager, Pool};
 use diesel_migrations::{embed_migrations, EmbeddedMigrations};
 use tracing::info;
 
-use crate::{HTLCOperation, HTLCState, OperationStatus, ZcashHTLC, ZcashNetwork};
-use crate::database::model::{DbHTLCOperation, DbZcashHTLC, NewHTLCOperation, NewZcashHTLC};
+use crate::{HTLCOperation, HTLCState, OperationStatus, RelayerUTXO, ZcashHTLC, ZcashNetwork};
+use crate::database::model::{DbHTLCOperation, DbRelayerUTXO, DbZcashHTLC, NewHTLCOperation, NewRelayerUTXO, NewZcashHTLC};
 
 use super::connections::{Database, DatabaseError};
 
@@ -339,5 +339,170 @@ impl Database {
             .optional()?;
 
         Ok(result.map(|b| b as u32))
+    }
+
+    pub fn create_relayer_utxo(&self, utxo: &RelayerUTXO) -> Result<(), DatabaseError> {
+        use crate::models::schema::relayer_utxos;
+        
+        let mut conn = self.get_connection()?;
+        
+        let new_utxo = NewRelayerUTXO {
+            id: utxo.id.clone(),
+            txid: utxo.txid.clone(),
+            vout: utxo.vout as i32,
+            amount: utxo.amount.clone(),
+            script_pubkey: utxo.script_pubkey.clone(),
+            confirmations: utxo.confirmations as i32,
+            address: utxo.address.clone(),
+        };
+        
+        diesel::insert_into(relayer_utxos::table)
+            .values(&new_utxo)
+            .on_conflict((relayer_utxos::txid, relayer_utxos::vout))
+            .do_nothing()
+            .execute(&mut conn)?;
+        
+        info!("📦 Created relayer UTXO: {}:{}", utxo.txid, utxo.vout);
+        Ok(())
+    }
+    
+    pub fn get_unspent_relayer_utxos(&self, address: &str) -> Result<Vec<RelayerUTXO>, DatabaseError> {
+        use crate::models::schema::relayer_utxos::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        let utxos = dsl::relayer_utxos
+            .filter(dsl::address.eq(address))
+            .filter(dsl::spent.eq(false))
+            .filter(dsl::confirmations.ge(1))
+            .order(dsl::amount.desc())
+            .select(DbRelayerUTXO::as_select())
+            .load::<DbRelayerUTXO>(&mut conn)?;
+        
+        Ok(utxos.into_iter().map(Into::into).collect())
+    }
+    
+    pub fn mark_utxo_spent(&self, txid: &str, vout: u32, spent_in_tx: &str) -> Result<(), DatabaseError> {
+        use crate::models::schema::relayer_utxos::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        diesel::update(
+            dsl::relayer_utxos
+                .filter(dsl::txid.eq(txid))
+                .filter(dsl::vout.eq(vout as i32))
+        )
+        .set((
+            dsl::spent.eq(true),
+            dsl::spent_in_tx.eq(spent_in_tx),
+            dsl::updated_at.eq(Utc::now()),
+        ))
+        .execute(&mut conn)?;
+        
+        info!("✅ Marked UTXO spent: {}:{} in tx {}", txid, vout, spent_in_tx);
+        Ok(())
+    }
+    
+    pub fn update_utxo_confirmations(&self, txid: &str, vout: u32, confirmations: u32) -> Result<(), DatabaseError> {
+        use crate::models::schema::relayer_utxos::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        diesel::update(
+            dsl::relayer_utxos
+                .filter(dsl::txid.eq(txid))
+                .filter(dsl::vout.eq(vout as i32))
+        )
+        .set((
+            dsl::confirmations.eq(confirmations as i32),
+            dsl::updated_at.eq(Utc::now()),
+        ))
+        .execute(&mut conn)?;
+        
+        Ok(())
+    }
+    
+    pub fn get_total_relayer_balance(&self, address: &str) -> Result<f64, DatabaseError> {
+        use crate::models::schema::relayer_utxos::dsl;
+        use diesel::dsl::sum;
+        
+        let mut conn = self.get_connection()?;
+        
+        let utxos: Vec<String> = dsl::relayer_utxos
+            .filter(dsl::address.eq(address))
+            .filter(dsl::spent.eq(false))
+            .select(dsl::amount)
+            .load(&mut conn)?;
+        
+        let total: f64 = utxos.iter()
+            .filter_map(|s| s.parse::<f64>().ok())
+            .sum();
+        
+        Ok(total)
+    }
+
+    pub fn get_pending_htlcs_for_creation(&self, limit: u32) -> Result<Vec<ZcashHTLC>, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        let htlcs = dsl::zcash_htlcs
+            .filter(dsl::state.eq(HTLCState::Pending as i16))
+            .filter(dsl::txid.is_null())
+            .order(dsl::created_at.asc())
+            .limit(limit as i64)
+            .select(DbZcashHTLC::as_select())
+            .load::<DbZcashHTLC>(&mut conn)?;
+        
+        Ok(htlcs.into_iter().map(Into::into).collect())
+    }
+    
+    pub fn get_htlcs_with_signed_redeem_tx(&self, limit: u32) -> Result<Vec<ZcashHTLC>, DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        let htlcs = dsl::zcash_htlcs
+            .filter(dsl::state.eq(HTLCState::Locked as i16))
+            .filter(dsl::signed_redeem_tx.is_not_null())
+            .order(dsl::created_at.asc())
+            .limit(limit as i64)
+            .select(DbZcashHTLC::as_select())
+            .load::<DbZcashHTLC>(&mut conn)?;
+        
+        Ok(htlcs.into_iter().map(Into::into).collect())
+    }
+    
+    // ==================== HTLC Recipient Operations ====================
+    
+    pub fn update_htlc_recipient(&self, htlc_id: &str, recipient_address: &str) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        diesel::update(dsl::zcash_htlcs.filter(dsl::id.eq(htlc_id)))
+            .set((
+                dsl::recipient_address.eq(recipient_address),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+        
+        Ok(())
+    }
+    
+    pub fn store_signed_redeem_tx(&self, htlc_id: &str, signed_tx: &str) -> Result<(), DatabaseError> {
+        use crate::models::schema::zcash_htlcs::dsl;
+        
+        let mut conn = self.get_connection()?;
+        
+        diesel::update(dsl::zcash_htlcs.filter(dsl::id.eq(htlc_id)))
+            .set((
+                dsl::signed_redeem_tx.eq(signed_tx),
+                dsl::updated_at.eq(Utc::now()),
+            ))
+            .execute(&mut conn)?;
+        
+        info!("✍️ Stored signed redeem tx for HTLC: {}", htlc_id);
+        Ok(())
     }
 }
