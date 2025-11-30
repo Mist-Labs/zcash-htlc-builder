@@ -105,8 +105,8 @@ impl TransactionBuilder {
         htlc_txid: &str,
         htlc_vout: u32,
         htlc_amount: &str,
-        secret: &str,
-        redeem_script: &Script,
+        _secret: &str,
+        _redeem_script: &Script,
         recipient_address: &str,
     ) -> Result<Transaction, TxBuilderError> {
         let txid = Txid::from_str(htlc_txid)
@@ -152,7 +152,7 @@ impl TransactionBuilder {
         htlc_vout: u32,
         htlc_amount: &str,
         timelock: u64,
-        redeem_script: &Script,
+        _redeem_script: &Script,
         refund_address: &str,
     ) -> Result<Transaction, TxBuilderError> {
         let txid = Txid::from_str(htlc_txid)

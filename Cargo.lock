@@ -2191,7 +2191,7 @@ dependencies = [
 
 [[package]]
 name = "zcash-htlc-builder"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "anyhow",
  "bech32 0.11.0",

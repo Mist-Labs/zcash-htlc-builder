@@ -12,6 +12,7 @@ pub struct ZcashRpcClient {
     rpc_url: String,
     rpc_user: Option<String>,
     rpc_password: Option<String>,
+    #[allow(dead_code)]
     network: ZcashNetwork,
     explorer_api: String,
 }

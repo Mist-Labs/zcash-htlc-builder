@@ -56,7 +56,7 @@ async fn create_htlc() -> Result<(), Box<dyn std::error::Error>> {
     info!("🔒 Hash lock: {}", hash_lock);
     info!("🗝️  Secret: {}", secret);
 
-    let params = HTLCParams {
+    let _params = HTLCParams {
         recipient_pubkey,
         refund_pubkey,
         hash_lock,
